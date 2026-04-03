@@ -38,15 +38,15 @@ waiting_interval=$(get_tmux_option "@sentinel-waiting-interval" "$default_waitin
 # Build pane border format with optional waiting indicator
 # When @pane_waiting is set → warning color + icon
 # Otherwise → normal color
-normal_fmt="#[fg=${fg},bg=${bg},bold] #{@pane_name} #[default]"
-waiting_fmt="#[fg=${waiting_fg},bg=${waiting_bg},bold] ${waiting_icon} #{@pane_name} #[default]"
-named_format="#{?@pane_waiting,${waiting_fmt},${normal_fmt}}"
+# Store formats as tmux options to avoid comma conflicts in #{?} conditionals
+tmux set-option -g @sentinel-fmt-normal "#[fg=${fg},bg=${bg},bold] #{@pane_name} #[default]"
+tmux set-option -g @sentinel-fmt-waiting "#[fg=${waiting_fg},bg=${waiting_bg},bold] ${waiting_icon} #{@pane_name} #[default]"
 
 # Enable pane border status
 tmux set-option -g pane-border-status "$border_status"
 
-# Set pane border format
-tmux set-option -g pane-border-format "${named_format}"
+# Set pane border format — use #{E:} to expand stored formats
+tmux set-option -g pane-border-format "#{?@pane_name,#{?@pane_waiting,#{E:@sentinel-fmt-waiting},#{E:@sentinel-fmt-normal}},}"
 
 # ─── Window status bar waiting indicator ───
 # Prepend waiting icon to window-status-format so it's visible from any window
@@ -92,11 +92,13 @@ case "$auto_mode" in
         tmux set-hook -g "$hook_name" "run-shell '$CURRENT_DIR/scripts/on-focus.sh'"
         ;;
     interval)
-        "$CURRENT_DIR/scripts/watch-panes.sh" "$auto_interval" &
+        "$CURRENT_DIR/scripts/watch-panes.sh" "$auto_interval" </dev/null >/dev/null 2>&1 &
+        disown
         ;;
     focus+interval|both)
         tmux set-hook -g "$hook_name" "run-shell '$CURRENT_DIR/scripts/on-focus.sh'"
-        "$CURRENT_DIR/scripts/watch-panes.sh" "$auto_interval" &
+        "$CURRENT_DIR/scripts/watch-panes.sh" "$auto_interval" </dev/null >/dev/null 2>&1 &
+        disown
         ;;
     off|*)
         tmux set-hook -gu "$hook_name" 2>/dev/null
@@ -117,7 +119,8 @@ if [ "$waiting_mode" != "off" ]; then
     tmux set-option -g monitor-bell on
     tmux set-option -g bell-action other
 
-    "$CURRENT_DIR/scripts/watch-waiting.sh" "$waiting_interval" &
+    "$CURRENT_DIR/scripts/watch-waiting.sh" "$waiting_interval" </dev/null >/dev/null 2>&1 &
+    disown
 fi
 
 # Register the plugin directory for programmatic access
